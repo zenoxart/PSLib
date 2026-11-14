@@ -65,6 +65,7 @@ try {
 # =========================================================
 # VALIDATION & ACTIVE DIRECTORY MODULE
 # =========================================================
+Install-WindowsFeature RSAT-AD-PowerShell
 
 Write-Host "`nChecking administrator privileges..."
 
