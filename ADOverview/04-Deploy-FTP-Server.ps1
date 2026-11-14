@@ -61,56 +61,73 @@ Start-Transcript `
 
 try {
 
-    # =====================================================
-    # VALIDATION
-    # =====================================================
+    
+# =========================================================
+# VALIDATION & ACTIVE DIRECTORY MODULE
+# =========================================================
 
-    $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+Write-Host "`nChecking administrator privileges..."
 
-    $Principal = New-Object Security.Principal.WindowsPrincipal($Identity)
+$Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$Principal = New-Object Security.Principal.WindowsPrincipal($Identity)
 
-    if (-not $Principal.IsInRole(
-        [Security.Principal.WindowsBuiltInRole]::Administrator
-    )) {
-        throw "Run as Administrator."
-    }
+if (-not $Principal.IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator
+)) {
+    throw "Run this script as Administrator."
+}
 
-    $Computer = Get-CimInstance Win32_ComputerSystem
+# Check domain membership
+$Computer = Get-CimInstance Win32_ComputerSystem
 
-    if (-not $Computer.PartOfDomain) {
-        throw "Server must be joined to an Active Directory domain."
-    }
+if (-not $Computer.PartOfDomain) {
+    throw "Server must be joined to an Active Directory domain."
+}
 
-    Import-Module ActiveDirectory
+Write-Host "Domain detected: $($Computer.Domain)"
 
-    $Domain = Get-ADDomain
-    $DomainDN = $Domain.DistinguishedName
-    $DomainName = $Domain.DNSRoot
+# =========================================================
+# INSTALL RSAT ACTIVE DIRECTORY POWERSHELL
+# =========================================================
 
-    Write-Host "Domain: $DomainName"
+Write-Host "`nChecking Active Directory PowerShell module..."
 
-    # =====================================================
-    # CERTIFICATE VALIDATION
-    # =====================================================
+if (-not (Get-Module -ListAvailable -Name ActiveDirectory)) {
 
-    if ($EnableFTPS) {
+    Write-Host "Active Directory module missing."
+    Write-Host "Installing RSAT-AD-PowerShell..."
 
-        if (-not $CertificateThumbprint) {
-            throw "FTPS requires a valid certificate thumbprint. Install a certificate first."
-        }
+    $Feature = Get-WindowsFeature RSAT-AD-PowerShell
 
-        $Certificate = Get-Item `
-            "Cert:\LocalMachine\My\$CertificateThumbprint" `
+    if (-not $Feature.Installed) {
+
+        Install-WindowsFeature RSAT-AD-PowerShell `
             -ErrorAction Stop
 
-        if ($Certificate.NotAfter -le (Get-Date)) {
-            throw "FTP certificate has expired."
-        }
-
-        if (-not $Certificate.HasPrivateKey) {
-            throw "FTP certificate has no private key."
-        }
     }
+}
+
+# Import module
+Import-Module ActiveDirectory -ErrorAction Stop
+
+Write-Host "Active Directory module loaded successfully." `
+    -ForegroundColor Green
+
+# =========================================================
+# DOMAIN INFORMATION
+# =========================================================
+
+$Domain = Get-ADDomain -ErrorAction Stop
+
+$DomainDN = $Domain.DistinguishedName
+$DomainName = $Domain.DNSRoot
+$DomainNetBIOS = $Domain.NetBIOSName
+
+Write-Host "`nDomain configuration:"
+Write-Host "DNS Domain: $DomainName"
+Write-Host "NetBIOS: $DomainNetBIOS"
+Write-Host "Distinguished Name: $DomainDN"
+
 
     # =====================================================
     # INSTALL IIS FTP COMPONENTS
